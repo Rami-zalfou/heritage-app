@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <title>Local Knowledge</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    
+    <title>Local Knowledge 2026</title>
+
     <!-- Leaflet & Esri Scripts -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,77 +12,54 @@
 
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; background: #eee; }
-        .ui-overlay {
-            position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 1000;
-            text-align: center; pointer-events: none;
+        #map { height: 100vh; width: 100vw; background: #ccd; }
+        
+        .overlay {
+            position: absolute; bottom: 30px; left: 0; right: 0;
+            z-index: 1000; text-align: center; pointer-events: none;
         }
         button {
-            padding: 15px 25px; background: #d90429; color: white; border: none;
+            padding: 15px 30px; background: #e63946; color: white; border: none;
             border-radius: 50px; font-weight: bold; cursor: pointer; pointer-events: auto;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-size: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 16px;
         }
-        #status {
-            background: rgba(255,255,255,0.9); padding: 5px 15px; border-radius: 15px;
-            font-size: 12px; margin-bottom: 10px; display: inline-block;
+        #status-pill {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(255, 255, 255, 0.9); padding: 5px 15px;
+            border-radius: 20px; font-size: 12px; border: 1px solid #ccc;
         }
     </style>
 </head>
 <body>
 
-    <div class="ui-overlay">
-        <div id="status">Ready</div><br>
-        <button onclick="startApp()">SEARCH NEAR ME</button>
+    <div id="status-pill">Map Ready</div>
+    
+    <div class="overlay">
+        <button onclick="startApp()">FIND HISTORIC BUILDINGS</button>
     </div>
+
     <div id="map"></div>
 
     <script>
-        // 1. Setup the Map
-        const map = L.map('map', { zoomControl: false }).setView([52.5, -1.5], 6);
-        const status = document.getElementById('status');
+        // 1. Setup Map
+        const map = L.map('map', { zoomControl: false }).setView([51.5, -0.1], 10);
+        const status = document.getElementById('status-pill');
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // 2. The Data Layer (Direct Connection)
-        // This is the official Historic England Feature Service URL
+        // 2. Updated 2026 Data Layer (National Heritage List v02)
         const heritageLayer = L.esri.featureLayer({
-            url: 'https://services.arcgis.com/JJHeAs9z9rlXtk8v/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
+            url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
             where: "1=1",
             pointToLayer: function (geojson, latlng) {
                 return L.circleMarker(latlng, {
-                    radius: 6, fillColor: "#ef233c", color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.9
+                    radius: 7, fillColor: "#e63946", color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.9
                 });
             }
         }).addTo(map);
 
-        // Feedback events
-        heritageLayer.on('loading', () => status.innerText = "Downloading buildings...");
-        heritageLayer.on('load', () => status.innerText = "Done! Zoom in to see dots.");
-
-        heritageLayer.bindPopup(function (layer) {
-            const p = layer.feature.properties;
-            return `<b>${p.Name}</b><br>Grade: ${p.Grade}<br><a href="https://historicengland.org.uk/listing/the-list/list-entry/${p.ListEntry}" target="_blank">Full Record</a>`;
-        });
-
-        // 3. The Function to Start
-        function startApp() {
-            status.innerText = "Locating you...";
-            map.locate({setView: true, maxZoom: 16});
-        }
-
-        map.on('locationfound', function(e) {
-            L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
-            status.innerText = "Location found. Fetching data...";
-        });
-
-        map.on('locationerror', function() {
-            status.innerText = "GPS Error. Check phone settings.";
-            // Fallback to a place with lots of data to prove it works
-            map.setView([51.501, -0.124], 15);
-        });
-
-    </script>
-</body>
-</html>
+        // Loading Feedback
+        heritageLayer.on('loading', () => status.innerText = "⏳ Loading buildings...");
+        heritageLayer.on('load', () => {
