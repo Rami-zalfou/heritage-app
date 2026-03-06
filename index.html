@@ -1,113 +1,136 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <title>Local Knowledge</title>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Local Knowledge - Heritage Map</title>
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
+    <!-- Mobile App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Leaflet CSS & Clustering CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
     <style>
-        body { margin: 0; padding: 0; background: #f0f0f0; }
-        #map { height: 100vh; width: 100vw; background: #fff; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #222; }
+        #map { height: 100vh; width: 100vw; }
         
-        .info-panel {
+        .overlay {
             position: absolute;
-            top: 10px;
+            bottom: 25px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
-            background: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-family: sans-serif;
-            font-size: 14px;
-            white-space: nowrap;
+            width: 80%;
+            max-width: 300px;
         }
 
-        .locate-btn {
-            position: absolute;
-            bottom: 30px;
-            right: 20px;
-            z-index: 1000;
-            background: #007bff;
+        #locate-btn {
+            width: 100%;
+            padding: 15px;
+            background: #e63946;
             color: white;
             border: none;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .status-pill {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: none;
         }
     </style>
 </head>
 <body>
 
-    <div class="info-panel" id="status">Loading Heritage Data...</div>
-    <button class="locate-btn" onclick="findMe()">📍</button>
+    <div id="status" class="status-pill">Loading Heritage Data...</div>
+    
+    <div class="overlay">
+        <button id="locate-btn">FIND BUILDINGS NEAR ME</button>
+    </div>
+
     <div id="map"></div>
 
-    <!-- Load Leaflet first -->
+    <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Load Esri Leaflet second -->
     <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/esri-leaflet-cluster@3.0.1/dist/esri-leaflet-cluster.js"></script>
 
     <script>
         // 1. Initialize Map
-        const map = L.map('map').setView([52.5, -1.5], 7);
+        const map = L.map('map', { zoomControl: false }).setView([52.5, -1.5], 7);
+        const statusEl = document.getElementById('status');
 
-        // 2. Use Standard OpenStreetMap (More reliable for global access)
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
+        // 2. Base Map (Dark mode looks better for heritage dots)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
-        // 3. Official Historic England API (Listed Buildings)
-        // Note: This only shows data for England.
-        const listedBuildings = L.esri.featureLayer({
+        // 3. The Heritage Layer (With Clustering!)
+        // This solves the "empty map" issue by grouping markers
+        const heritageLayer = L.esri.Cluster.featureLayer({
             url: 'https://services.arcgis.com/JJHeAs9z9rlXtk8v/arcgis/rest/services/Historic_England_Listed_Buildings/FeatureServer/0',
-            where: "1=1",
+            disableClusteringAtZoom: 16, // Show individual dots when close
+            spiderfyOnMaxZoom: true,
             pointToLayer: function (geojson, latlng) {
                 return L.circleMarker(latlng, {
-                    radius: 7,
-                    fillColor: "#ff4d4d",
+                    radius: 6,
+                    fillColor: "#ff0000",
                     color: "#fff",
-                    weight: 2,
+                    weight: 1,
                     opacity: 1,
-                    fillOpacity: 0.9
+                    fillOpacity: 0.8
                 });
             }
         }).addTo(map);
 
-        // Status Update logic
-        listedBuildings.on('load', function() {
-            document.getElementById('status').innerText = "Zoom in to see buildings";
-        });
-
-        // 4. Popup Logic
-        listedBuildings.bindPopup(function (layer) {
+        // 4. Popups
+        heritageLayer.bindPopup(function (layer) {
             const p = layer.feature.properties;
-            return `<strong>${p.Name || 'Listed Building'}</strong><br>
-                    Grade: ${p.Grade}<br>
+            return `<strong>${p.Name}</strong><br>Grade: ${p.Grade}<br>
                     <a href="https://historicengland.org.uk/listing/the-list/list-entry/${p.ListEntry}" target="_blank">View History</a>`;
         });
 
-        // 5. Location Logic
-        function findMe() {
-            map.locate({setView: true, maxZoom: 16});
-        }
+        // 5. Handling Interaction
+        const btn = document.getElementById('locate-btn');
+        
+        btn.onclick = function() {
+            statusEl.style.display = 'block';
+            statusEl.innerText = "Locating...";
+            map.locate({setView: true, maxZoom: 17});
+        };
 
         map.on('locationfound', function(e) {
-            L.circle(e.latlng, e.accuracy).addTo(map);
+            statusEl.innerText = "Found you! Loading nearby buildings...";
             L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
-            document.getElementById('status').innerText = "Found you! Fetching buildings...";
+            btn.style.display = 'none'; // Hide button once found
         });
 
-        // Try to locate user immediately
-        findMe();
+        map.on('locationerror', function() {
+            alert("Please enable location services in your browser settings.");
+            statusEl.innerText = "Location access denied.";
+        });
+
+        heritageLayer.on('load', function() {
+            statusEl.style.display = 'none';
+        });
+
     </script>
 </body>
 </html>
