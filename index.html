@@ -1,65 +1,110 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8" />
+    <title>Heritage Finder Diagnostic</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Local Knowledge 2026</title>
-
+    
     <!-- Leaflet & Esri Scripts -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- We use the most recent stable Esri Leaflet -->
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; background: #ccd; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #111; }
+        #map { height: 100vh; width: 100vw; }
         
-        .overlay {
-            position: absolute; bottom: 30px; left: 0; right: 0;
-            z-index: 1000; text-align: center; pointer-events: none;
+        .ui {
+            position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
         }
+        
+        #console {
+            background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; border-radius: 5px;
+            font-family: monospace; font-size: 11px; max-height: 100px; overflow-y: auto;
+            pointer-events: auto; border: 1px solid #333;
+        }
+
         button {
-            padding: 15px 30px; background: #e63946; color: white; border: none;
-            border-radius: 50px; font-weight: bold; cursor: pointer; pointer-events: auto;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 16px;
-        }
-        #status-pill {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(255, 255, 255, 0.9); padding: 5px 15px;
-            border-radius: 20px; font-size: 12px; border: 1px solid #ccc;
+            padding: 15px; background: #e63946; color: white; border: none;
+            border-radius: 10px; font-weight: bold; cursor: pointer; pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
 
-    <div id="status-pill">Map Ready</div>
-    
-    <div class="overlay">
-        <button onclick="startApp()">FIND HISTORIC BUILDINGS</button>
+    <div class="ui">
+        <div id="console">Initializing...</div>
+        <button onclick="startSearch()">FIND NEAR ME</button>
     </div>
-
+    
     <div id="map"></div>
 
     <script>
-        // 1. Setup Map
-        const map = L.map('map', { zoomControl: false }).setView([51.5, -0.1], 10);
-        const status = document.getElementById('status-pill');
+        const log = (msg) => {
+            const el = document.getElementById('console');
+            el.innerHTML += `> ${msg}<br>`;
+            el.scrollTop = el.scrollHeight;
+            console.log(msg);
+        };
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+        // 1. Setup Map
+        const map = L.map('map', { zoomControl: false }).setView([51.505, -0.09], 13);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OSM'
         }).addTo(map);
 
-        // 2. Updated 2026 Data Layer (National Heritage List v02)
+        // 2. The Corrected Data Layer
+        // We use the 'National Heritage List v02' which is the active 2026 endpoint
         const heritageLayer = L.esri.featureLayer({
             url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
-            where: "1=1",
-            pointToLayer: function (geojson, latlng) {
-                return L.circleMarker(latlng, {
-                    radius: 7, fillColor: "#e63946", color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.9
-                });
-            }
+            // This is key: tell the server exactly what we want back to avoid errors
+            precision: 6,
+            outSR: 4326, 
+            where: "1=1"
         }).addTo(map);
 
-        // Loading Feedback
-        heritageLayer.on('loading', () => status.innerText = "⏳ Loading buildings...");
-        heritageLayer.on('load', () => {
+        // Diagnostic Events
+        heritageLayer.on('requeststart', () => log("Requesting buildings from server..."));
+        heritageLayer.on('requestsuccess', () => log("Data received successfully!"));
+        heritageLayer.on('requesterr', (e) => log("SERVER ERROR: " + e.error.message));
+        
+        heritageLayer.on('load', (e) => {
+            log("Drawing dots on map...");
+            if (map.getZoom() < 14) log("TIP: Zoom in closer to see points.");
+        });
+
+        // Popup logic with specific 2026 field names
+        heritageLayer.bindPopup(function (layer) {
+            const p = layer.feature.properties;
+            // Note: field names are often case-sensitive
+            return `<b>${p.Name || 'Listed Building'}</b><br>
+                    Grade: ${p.Grade}<br>
+                    <a href="${p.hyperlink}" target="_blank">View History</a>`;
+        });
+
+        // 3. User Controls
+        function startSearch() {
+            log("Requesting GPS location...");
+            map.locate({setView: true, maxZoom: 16});
+        }
+
+        map.on('locationfound', (e) => {
+            log("GPS Found! Accuracy: " + Math.round(e.accuracy) + "m");
+            L.circle(e.latlng, e.accuracy).addTo(map);
+            L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
+        });
+
+        map.on('locationerror', (e) => {
+            log("GPS FAILED: " + e.message);
+            log("Defaulting to London (Westminster) to test data...");
+            map.setView([51.5007, -0.1246], 16);
+        });
+
+        log("App ready. Tap button to start.");
+    </script>
+</body>
+</html>
