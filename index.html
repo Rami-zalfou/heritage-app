@@ -3,29 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Local Knowledge - Listed Buildings</title>
+    <title>Local Knowledge - Heritage Map</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; }
+        body { margin: 0; padding: 0; background: #f0f0f0; }
+        #map { height: 100vh; width: 100vw; background: #fff; }
         
-        /* Custom UI Elements */
         .info-panel {
             position: absolute;
             top: 10px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px 20px;
-            border-radius: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            font-weight: bold;
-            pointer-events: none;
-            text-align: center;
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-family: sans-serif;
+            font-size: 14px;
+            white-space: nowrap;
         }
 
         .locate-btn {
@@ -36,80 +35,78 @@
             background: #007bff;
             color: white;
             border: none;
-            padding: 15px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             font-size: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
 
-    <div class="info-panel">Historic England Listed Buildings</div>
+    <div class="info-panel" id="status">Loading Heritage Data...</div>
     <button class="locate-btn" onclick="findMe()">📍</button>
     <div id="map"></div>
 
-    <!-- Leaflet JS -->
+    <!-- Load Leaflet first -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Esri Leaflet (to load Historic England Data) -->
+    <!-- Load Esri Leaflet second -->
     <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
 
     <script>
-        // 1. Initialize Map centered on England
-        const map = L.map('map').setView([52.35, -1.5], 7);
+        // 1. Initialize Map
+        const map = L.map('map').setView([52.5, -1.5], 7);
 
-        // 2. Add a clean Map Tile Layer (CartoDB Positron is less cluttered than OSM)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        // 2. Use Standard OpenStreetMap (More reliable for global access)
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // 3. Connect to Historic England's official ArcGIS Feature Server
-        // This layer contains all Listed Buildings
+        // 3. Official Historic England API (Listed Buildings)
+        // Note: This only shows data for England.
         const listedBuildings = L.esri.featureLayer({
             url: 'https://services.arcgis.com/JJHeAs9z9rlXtk8v/arcgis/rest/services/Historic_England_Listed_Buildings/FeatureServer/0',
-            precision: 5, // Improves performance on mobile
-            style: function () {
-                return { color: "#7209b7", weight: 2 };
-            },
+            where: "1=1",
             pointToLayer: function (geojson, latlng) {
-                // Return a simple circle marker for speed
                 return L.circleMarker(latlng, {
-                    radius: 6,
-                    fillColor: "#e63946",
+                    radius: 7,
+                    fillColor: "#ff4d4d",
                     color: "#fff",
-                    weight: 1,
+                    weight: 2,
                     opacity: 1,
-                    fillOpacity: 0.8
+                    fillOpacity: 0.9
                 });
             }
         }).addTo(map);
 
-        // 4. Create Popups with Heritage Details
-        listedBuildings.bindPopup(function (layer) {
-            const props = layer.feature.properties;
-            return L.Util.template(
-                `<strong>{Name}</strong><br>
-                Grade: {Grade}<br>
-                List Entry: <a href="https://historicengland.org.uk/listing/the-list/list-entry/{ListEntry}" target="_blank">{ListEntry}</a>`, 
-                props
-            );
+        // Status Update logic
+        listedBuildings.on('load', function() {
+            document.getElementById('status').innerText = "Zoom in to see buildings";
         });
 
-        // 5. Geolocation Functionality
+        // 4. Popup Logic
+        listedBuildings.bindPopup(function (layer) {
+            const p = layer.feature.properties;
+            return `<strong>${p.Name || 'Listed Building'}</strong><br>
+                    Grade: ${p.Grade}<br>
+                    <a href="https://historicengland.org.uk/listing/the-list/list-entry/${p.ListEntry}" target="_blank">View History</a>`;
+        });
+
+        // 5. Location Logic
         function findMe() {
             map.locate({setView: true, maxZoom: 16});
         }
 
         map.on('locationfound', function(e) {
+            L.circle(e.latlng, e.accuracy).addTo(map);
             L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
+            document.getElementById('status').innerText = "Found you! Fetching buildings...";
         });
 
-        map.on('locationerror', function(e) {
-            alert("Location access denied.");
-        });
-
-        // Automatically try to find user on load
+        // Try to locate user immediately
         findMe();
     </script>
 </body>
