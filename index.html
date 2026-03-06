@@ -2,109 +2,136 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Heritage Finder Diagnostic</title>
+    <title>Local Knowledge</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <!-- Leaflet & Esri Scripts -->
+    <!-- Leaflet & Esri Cluster Scripts -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- We use the most recent stable Esri Leaflet -->
-    <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #111; }
+        :root { --primary: #d90429; --dark: #2b2d42; }
+        body { margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; background: #f4f4f9; }
         #map { height: 100vh; width: 100vw; }
         
-        .ui {
-            position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 2000;
-            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
-        }
-        
-        #console {
-            background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; border-radius: 5px;
-            font-family: monospace; font-size: 11px; max-height: 100px; overflow-y: auto;
-            pointer-events: auto; border: 1px solid #333;
+        /* UI Elements */
+        .controls {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 10px;
         }
 
         button {
-            padding: 15px; background: #e63946; color: white; border: none;
-            border-radius: 10px; font-weight: bold; cursor: pointer; pointer-events: auto;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            padding: 16px; background: var(--primary); color: white; border: none;
+            border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); pointer-events: auto;
+        }
+
+        .loader {
+            background: white; padding: 10px; border-radius: 8px; text-align: center;
+            font-size: 13px; font-weight: 500; color: var(--dark); box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none; border: 1px solid #eee;
+        }
+
+        /* Custom Popup Styling */
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 5px; }
+        .popup-card b { font-size: 16px; display: block; margin-bottom: 5px; color: var(--primary); }
+        .popup-card span { font-size: 13px; color: #666; display: block; margin-bottom: 10px; }
+        .btn-link { 
+            display: block; text-align: center; background: var(--dark); color: white; 
+            text-decoration: none; padding: 8px; border-radius: 6px; font-size: 13px;
         }
     </style>
 </head>
 <body>
 
-    <div class="ui">
-        <div id="console">Initializing...</div>
-        <button onclick="startSearch()">FIND NEAR ME</button>
+    <div class="controls">
+        <div id="loader" class="loader">Zoom in to see buildings...</div>
+        <button id="gps-btn" onclick="startApp()">📍 Find Buildings Near Me</button>
     </div>
     
     <div id="map"></div>
 
-    <script>
-        const log = (msg) => {
-            const el = document.getElementById('console');
-            el.innerHTML += `> ${msg}<br>`;
-            el.scrollTop = el.scrollHeight;
-            console.log(msg);
-        };
+    <!-- Essential Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/esri-leaflet-cluster@3.0.1/dist/esri-leaflet-cluster.js"></script>
 
-        // 1. Setup Map
-        const map = L.map('map', { zoomControl: false }).setView([51.505, -0.09], 13);
+    <script>
+        const loader = document.getElementById('loader');
         
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        // 1. Setup Map
+        const map = L.map('map', { zoomControl: false, tap: false }).setView([52.5, -1.5], 7);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             attribution: '© OSM'
         }).addTo(map);
 
-        // 2. The Corrected Data Layer
-        // We use the 'National Heritage List v02' which is the active 2026 endpoint
-        const heritageLayer = L.esri.featureLayer({
+        // 2. Optimized Cluster Layer
+        // This groups dots together so the app doesn't lag
+        const heritageLayer = L.esri.Cluster.featureLayer({
             url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
-            // This is key: tell the server exactly what we want back to avoid errors
-            precision: 6,
-            outSR: 4326, 
-            where: "1=1"
+            
+            // Speed Settings:
+            disableClusteringAtZoom: 17, // Show individual dots only when very close
+            spiderfyOnMaxZoom: true,
+            removeOutsideVisibleBounds: true,
+            
+            pointToLayer: function (geojson, latlng) {
+                return L.circleMarker(latlng, {
+                    radius: 8,
+                    fillColor: "#d90429",
+                    color: "white",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                });
+            }
         }).addTo(map);
 
-        // Diagnostic Events
-        heritageLayer.on('requeststart', () => log("Requesting buildings from server..."));
-        heritageLayer.on('requestsuccess', () => log("Data received successfully!"));
-        heritageLayer.on('requesterr', (e) => log("SERVER ERROR: " + e.error.message));
-        
-        heritageLayer.on('load', (e) => {
-            log("Drawing dots on map...");
-            if (map.getZoom() < 14) log("TIP: Zoom in closer to see points.");
+        // 3. User Feedback Logic
+        heritageLayer.on('loading', () => {
+            loader.style.display = 'block';
+            loader.innerText = "⏳ Loading Data...";
         });
 
-        // Popup logic with specific 2026 field names
+        heritageLayer.on('load', () => {
+            if (map.getZoom() < 12) {
+                loader.innerText = "🔍 Zoom in closer to load dots";
+            } else {
+                loader.style.display = 'none';
+            }
+        });
+
+        // 4. Description & Popup Logic
         heritageLayer.bindPopup(function (layer) {
             const p = layer.feature.properties;
-            // Note: field names are often case-sensitive
-            return `<b>${p.Name || 'Listed Building'}</b><br>
-                    Grade: ${p.Grade}<br>
-                    <a href="${p.hyperlink}" target="_blank">View History</a>`;
+            return `
+                <div class="popup-card">
+                    <b>${p.Name || 'Listed Building'}</b>
+                    <span>Grade: ${p.Grade} | List Entry: ${p.ListEntry}</span>
+                    <a href="${p.hyperlink}" target="_blank" class="btn-link">Read Full Description</a>
+                </div>
+            `;
         });
 
-        // 3. User Controls
-        function startSearch() {
-            log("Requesting GPS location...");
+        // 5. GPS Function
+        function startApp() {
+            loader.style.display = 'block';
+            loader.innerText = "🛰️ Finding your location...";
             map.locate({setView: true, maxZoom: 16});
         }
 
         map.on('locationfound', (e) => {
-            log("GPS Found! Accuracy: " + Math.round(e.accuracy) + "m");
-            L.circle(e.latlng, e.accuracy).addTo(map);
             L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
         });
 
-        map.on('locationerror', (e) => {
-            log("GPS FAILED: " + e.message);
-            log("Defaulting to London (Westminster) to test data...");
+        map.on('locationerror', () => {
+            alert("Could not find location. Defaulting to London.");
             map.setView([51.5007, -0.1246], 16);
         });
 
-        log("App ready. Tap button to start.");
     </script>
 </body>
 </html>
