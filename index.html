@@ -3,65 +3,62 @@
 <head>
     <meta charset="utf-8" />
     <title>Local Knowledge</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
-    <!-- Stylesheets -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
     <style>
-        :root { --primary: #d90429; --dark: #2b2d42; }
-        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; overflow: hidden; background: #eee; }
+        :root { --primary: #d90429; --dark: #1a1a1a; }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: #000; overflow: hidden; }
         #map { height: 100vh; width: 100vw; z-index: 1; }
 
-        /* Floating UI */
-        .top-ui {
-            position: absolute; top: 15px; left: 15px; right: 15px; z-index: 1000;
-            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
-        }
-        #status-bar {
-            background: rgba(255,255,255,0.9); padding: 8px 15px; border-radius: 20px;
-            font-size: 12px; font-weight: bold; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        #gps-btn {
-            position: absolute; bottom: 100px; right: 20px; z-index: 1000;
-            background: var(--primary); color: white; border: none; width: 56px; height: 56px;
-            border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 24px; cursor: pointer;
+        /* Status Bar */
+        #status {
+            position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
+            background: rgba(255,255,255,0.95); padding: 10px; border-radius: 12px;
+            font-size: 13px; font-weight: bold; text-align: center; color: var(--dark);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); pointer-events: none;
         }
 
-        /* Bottom Details Drawer */
+        /* GPS Button */
+        #gps-btn {
+            position: absolute; bottom: 30px; right: 20px; z-index: 1000;
+            background: var(--primary); color: white; border: none; width: 60px; height: 60px;
+            border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-size: 28px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
+        /* Bottom Detail Drawer */
         #details-panel {
-            position: fixed; bottom: -100%; left: 0; right: 0;
-            background: white; z-index: 2000; padding: 25px 20px 40px 20px;
+            position: fixed; bottom: -110%; left: 0; right: 0;
+            background: white; z-index: 2001; padding: 25px 20px 40px 20px;
             border-top-left-radius: 24px; border-top-right-radius: 24px;
-            box-shadow: 0 -5px 30px rgba(0,0,0,0.2);
-            transition: bottom 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.3);
+            transition: bottom 0.3s ease-out;
             pointer-events: auto;
         }
         #details-panel.open { bottom: 0; }
-        .handle { width: 40px; height: 5px; background: #e0e0e0; border-radius: 10px; margin: -15px auto 20px auto; }
         
-        h2 { margin: 0 0 8px 0; font-size: 20px; color: var(--dark); }
-        .grade-pill { display: inline-block; padding: 4px 12px; border-radius: 50px; background: #eee; font-size: 12px; font-weight: bold; margin-bottom: 12px; }
-        .link-btn { display: block; width: 100%; text-align: center; background: var(--dark); color: white; text-decoration: none; padding: 14px; border-radius: 12px; margin-top: 20px; font-weight: bold; }
-        #close-x { position: absolute; top: 15px; right: 20px; background: none; border: none; font-size: 20px; color: #ccc; }
+        .handle { width: 40px; height: 4px; background: #ccc; border-radius: 10px; margin: -10px auto 20px auto; }
+        h2 { margin: 0 0 10px 0; font-size: 20px; line-height: 1.2; color: #000; }
+        .grade { display: inline-block; padding: 5px 12px; border-radius: 6px; background: #eee; font-size: 12px; font-weight: bold; margin-bottom: 15px; }
+        .link-btn { display: block; background: var(--dark); color: white; text-align: center; text-decoration: none; padding: 15px; border-radius: 12px; font-weight: bold; margin-top: 20px; }
+        #close-x { position: absolute; top: 15px; right: 20px; border: none; background: #f0f0f0; border-radius: 50%; width: 30px; height: 30px; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="top-ui">
-        <div id="status-bar">Map Ready</div>
-    </div>
-
-    <button id="gps-btn" onclick="locateUser()">🎯</button>
+    <div id="status">Initializing Map...</div>
+    <button id="gps-btn" onclick="startGps()">🎯</button>
     <div id="map"></div>
 
     <div id="details-panel">
         <div class="handle"></div>
         <button id="close-x" onclick="closePanel()">✕</button>
-        <div id="panel-body">
-            <p style="color:#888">Select a building to view details</p>
+        <div id="panel-content">
+            <p>Loading details...</p>
         </div>
     </div>
 
@@ -72,72 +69,80 @@
     <script src="https://unpkg.com/esri-leaflet-cluster@3.0.1/dist/esri-leaflet-cluster.js"></script>
 
     <script>
-        const status = document.getElementById('status-bar');
+        const status = document.getElementById('status');
         const panel = document.getElementById('details-panel');
-        const body = document.getElementById('panel-body');
+        const content = document.getElementById('panel-content');
 
-        // 1. Setup Map - disable tap to fix ghost clicks on mobile
+        // 1. Setup Map - using standard tap interactions
         const map = L.map('map', { 
             zoomControl: false,
-            tap: false // Recommended for mobile Leaflet 1.9+
-        }).setView([51.5, -0.1], 12);
+            center: [51.5, -0.1],
+            zoom: 12
+        });
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // 2. Data Layer
+        // 2. Optimized Heritage Layer
         const heritage = L.esri.Cluster.featureLayer({
             url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
             disableClusteringAtZoom: 16,
+            spiderfyOnMaxZoom: true,
             pointToLayer: (geojson, latlng) => {
                 const g = geojson.properties.Grade;
                 const color = (g === 'I') ? '#7209b7' : (g === 'II*') ? '#3a0ca3' : '#4361ee';
-                return L.circleMarker(latlng, { radius: 9, fillColor: color, color: 'white', weight: 2, fillOpacity: 0.9 });
+                // Large circles for easier tapping
+                return L.circleMarker(latlng, { radius: 10, fillColor: color, color: 'white', weight: 2, fillOpacity: 0.9, interactive: true });
             }
         }).addTo(map);
 
-        // 3. Robust Interaction
-        heritage.on('click', (e) => {
-            const p = e.layer.feature.properties;
-            showDetails(p, e.latlng);
+        // 3. THE FIX: Reliable Mobile Tapping
+        // We listen to the layer itself for clicks
+        heritage.on('click', function(e) {
+            L.DomEvent.stopPropagation(e); // Stop the map from thinking we clicked the background
+            const props = e.layer.feature.properties;
+            showDetails(props, e.latlng);
         });
 
-        // Add a secondary check for clusters/mobile taps
-        map.on('click', () => { if(panel.classList.contains('open')) closePanel(); });
+        // Close panel if map background is tapped
+        map.on('click', closePanel);
 
         function showDetails(p, latlng) {
-            body.innerHTML = `
-                <div class="grade-pill">Grade ${p.Grade}</div>
-                <h2>${p.Name || 'Listed Building'}</h2>
-                <p style="font-size:14px; color:#555">List Entry: ${p.ListEntry}</p>
-                <p style="font-size:14px; line-height:1.6; color:#333">This building is officially listed for its special architectural or historic interest.</p>
-                <a href="${p.hyperlink}" target="_blank" class="link-btn">Full NHLE Record</a>
+            content.innerHTML = `
+                <div class="grade" style="background: #eef2ff; color: #312e81;">Grade ${p.Grade}</div>
+                <h2>${p.Name || 'Historic Building'}</h2>
+                <p style="font-size:14px; color:#666">List Entry: ${p.ListEntry}</p>
+                <p style="font-size:15px; line-height:1.5; color:#333">This building is protected for its special architectural or historic interest.</p>
+                <a href="${p.hyperlink}" target="_blank" class="link-btn">Official History Record</a>
             `;
             panel.classList.add('open');
-            map.panTo([latlng.lat - 0.003, latlng.lng]);
+            // Offset the map so the marker is above the panel
+            const targetPoint = map.project(latlng).subtract([0, 150]);
+            const targetLatLng = map.unproject(targetPoint);
+            map.panTo(targetLatLng, { animate: true });
         }
 
         function closePanel() { panel.classList.remove('open'); }
 
-        // 4. Improved Geolocation
-        function locateUser() {
-            status.innerText = "🛰️ Accessing GPS...";
+        // 4. Robust Location Logic
+        function startGps() {
+            status.innerText = "🛰️ Locating...";
             map.locate({setView: true, maxZoom: 16, enableHighAccuracy: true});
         }
 
         map.on('locationfound', (e) => {
             status.innerText = "✅ Location Found";
-            L.circleMarker(e.latlng, {radius: 12, fillColor: '#d90429', color: 'white', weight: 3}).addTo(map);
+            L.circleMarker(e.latlng, {radius: 12, fillColor: '#d90429', color: 'white', weight: 4}).addTo(map);
         });
 
         map.on('locationerror', (e) => {
-            status.innerText = "❌ GPS Error: " + e.message;
-            alert("Location access was denied. Please check your browser settings.");
+            status.innerText = "❌ GPS Error. Check phone settings.";
+            alert("Please allow location access in your browser settings to find buildings near you.");
             map.setView([51.5007, -0.1246], 15); // Default to London
         });
 
+        // Server Status Updates
         heritage.on('loading', () => status.innerText = "⏳ Updating Data...");
         heritage.on('load', () => status.innerText = (map.getZoom() < 13) ? "🔍 Zoom in for data" : "Map Ready");
-
     </script>
 </body>
 </html>
