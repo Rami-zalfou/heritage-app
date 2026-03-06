@@ -5,132 +5,140 @@
     <title>Local Knowledge</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <!-- Leaflet & Esri Cluster Scripts -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
     <style>
-        :root { --primary: #d90429; --dark: #2b2d42; }
-        body { margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; background: #f4f4f9; }
-        #map { height: 100vh; width: 100vw; }
+        :root { --primary: #d90429; --dark: #2b2d42; --grade1: #7209b7; --grade2s: #3a0ca3; --grade2: #4361ee; }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        /* Floating Search Button */
+        #gps-btn {
+            position: absolute; top: 20px; right: 20px; z-index: 1000;
+            background: white; border: none; padding: 12px; border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-size: 20px; cursor: pointer;
+        }
+
+        /* Bottom Sheet (The Info Panel) */
+        #details-panel {
+            position: fixed; bottom: -100%; left: 0; right: 0;
+            background: white; z-index: 2000; padding: 20px;
+            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.15);
+            transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 50vh; overflow-y: auto;
+        }
+        #details-panel.open { bottom: 0; }
+
+        .handle { 
+            width: 40px; height: 5px; background: #ddd; border-radius: 10px; 
+            margin: -10px auto 15px auto; 
+        }
+
+        h2 { margin: 0 0 5px 0; font-size: 18px; color: var(--dark); line-height: 1.2; }
+        .grade-badge { 
+            display: inline-block; padding: 4px 8px; border-radius: 4px; 
+            font-size: 12px; font-weight: bold; color: white; margin-bottom: 15px;
+        }
         
-        /* UI Elements */
-        .controls {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 10px;
+        .external-btn {
+            display: block; width: 100%; text-align: center; background: var(--dark);
+            color: white; text-decoration: none; padding: 12px; border-radius: 8px;
+            margin-top: 15px; font-weight: 500;
         }
 
-        button {
-            padding: 16px; background: var(--primary); color: white; border: none;
-            border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); pointer-events: auto;
-        }
-
-        .loader {
-            background: white; padding: 10px; border-radius: 8px; text-align: center;
-            font-size: 13px; font-weight: 500; color: var(--dark); box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: none; border: 1px solid #eee;
-        }
-
-        /* Custom Popup Styling */
-        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 5px; }
-        .popup-card b { font-size: 16px; display: block; margin-bottom: 5px; color: var(--primary); }
-        .popup-card span { font-size: 13px; color: #666; display: block; margin-bottom: 10px; }
-        .btn-link { 
-            display: block; text-align: center; background: var(--dark); color: white; 
-            text-decoration: none; padding: 8px; border-radius: 6px; font-size: 13px;
+        #close-btn { 
+            float: right; background: #eee; border: none; border-radius: 50%; 
+            width: 30px; height: 30px; cursor: pointer; 
         }
     </style>
 </head>
 <body>
 
-    <div class="controls">
-        <div id="loader" class="loader">Zoom in to see buildings...</div>
-        <button id="gps-btn" onclick="startApp()">📍 Find Buildings Near Me</button>
-    </div>
-    
+    <button id="gps-btn" onclick="startApp()">📍</button>
+
+    <!-- The Map -->
     <div id="map"></div>
 
-    <!-- Essential Libraries -->
+    <!-- The Sliding Detail Drawer -->
+    <div id="details-panel">
+        <div class="handle"></div>
+        <button id="close-btn" onclick="closePanel()">✕</button>
+        <div id="content">
+            <p style="color: #666;">Tap a building to see details</p>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://unpkg.com/esri-leaflet-cluster@3.0.1/dist/esri-leaflet-cluster.js"></script>
 
     <script>
-        const loader = document.getElementById('loader');
-        
-        // 1. Setup Map
-        const map = L.map('map', { zoomControl: false, tap: false }).setView([52.5, -1.5], 7);
-        
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OSM'
-        }).addTo(map);
+        const panel = document.getElementById('details-panel');
+        const content = document.getElementById('content');
 
-        // 2. Optimized Cluster Layer
-        // This groups dots together so the app doesn't lag
+        // 1. Setup Map (Clean Voyager style)
+        const map = L.map('map', { zoomControl: false }).setView([51.5, -0.1], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+
+        // 2. Data Layer with Logic for Colors
         const heritageLayer = L.esri.Cluster.featureLayer({
             url: 'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/0',
-            
-            // Speed Settings:
-            disableClusteringAtZoom: 17, // Show individual dots only when very close
-            spiderfyOnMaxZoom: true,
-            removeOutsideVisibleBounds: true,
-            
+            disableClusteringAtZoom: 16,
             pointToLayer: function (geojson, latlng) {
+                // Color dots by Grade
+                const grade = geojson.properties.Grade;
+                let color = "#4361ee"; // Default Grade II
+                if(grade === "I") color = "#7209b7";
+                if(grade === "II*") color = "#3a0ca3";
+
                 return L.circleMarker(latlng, {
-                    radius: 8,
-                    fillColor: "#d90429",
-                    color: "white",
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.9
+                    radius: 8, fillColor: color, color: "white", weight: 2, opacity: 1, fillOpacity: 0.9
                 });
             }
         }).addTo(map);
 
-        // 3. User Feedback Logic
-        heritageLayer.on('loading', () => {
-            loader.style.display = 'block';
-            loader.innerText = "⏳ Loading Data...";
-        });
+        // 3. The "Clicking" Logic
+        heritageLayer.on('click', function (e) {
+            const p = e.layer.feature.properties;
+            
+            // Set Color based on grade
+            let gradeColor = "var(--grade2)";
+            if(p.Grade === "I") gradeColor = "var(--grade1)";
+            if(p.Grade === "II*") gradeColor = "var(--grade2s)";
 
-        heritageLayer.on('load', () => {
-            if (map.getZoom() < 12) {
-                loader.innerText = "🔍 Zoom in closer to load dots";
-            } else {
-                loader.style.display = 'none';
-            }
-        });
-
-        // 4. Description & Popup Logic
-        heritageLayer.bindPopup(function (layer) {
-            const p = layer.feature.properties;
-            return `
-                <div class="popup-card">
-                    <b>${p.Name || 'Listed Building'}</b>
-                    <span>Grade: ${p.Grade} | List Entry: ${p.ListEntry}</span>
-                    <a href="${p.hyperlink}" target="_blank" class="btn-link">Read Full Description</a>
-                </div>
+            // Update the Bottom Sheet Content
+            content.innerHTML = `
+                <div class="grade-badge" style="background:${gradeColor}">Grade ${p.Grade}</div>
+                <h2>${p.Name || 'Listed Building'}</h2>
+                <p style="font-size: 14px; color: #555;">List Entry: ${p.ListEntry}</p>
+                <p style="font-size: 14px; line-height: 1.5;">This building is protected under the Planning (Listed Buildings and Conservation Areas) Act 1990 for its special architectural or historic interest.</p>
+                <a href="${p.hyperlink}" target="_blank" class="external-btn">Open Full NHLE Record</a>
             `;
+
+            // Open the panel
+            panel.classList.add('open');
+            
+            // Center map slightly above the point so the panel doesn't hide it
+            map.panTo([e.latlng.lat - 0.002, e.latlng.lng]);
         });
 
-        // 5. GPS Function
+        // 4. Utility Functions
+        function closePanel() { panel.classList.remove('open'); }
+        
         function startApp() {
-            loader.style.display = 'block';
-            loader.innerText = "🛰️ Finding your location...";
             map.locate({setView: true, maxZoom: 16});
         }
 
         map.on('locationfound', (e) => {
-            L.marker(e.latlng).addTo(map).bindPopup("You are here").openPopup();
+            L.circleMarker(e.latlng, {radius: 10, fillColor: "#007bff", color: "white"}).addTo(map);
         });
 
-        map.on('locationerror', () => {
-            alert("Could not find location. Defaulting to London.");
-            map.setView([51.5007, -0.1246], 16);
-        });
+        // Close panel if map is clicked
+        map.on('click', closePanel);
 
     </script>
 </body>
